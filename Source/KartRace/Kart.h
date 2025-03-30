@@ -36,6 +36,9 @@ private:
 	UPROPERTY(EditAnywhere)
 	FVector Velocity;
 
+	UPROPERTY(EditAnywhere)
+	FVector Acceleration;
+
 	// 차의 질량(kg)
 	UPROPERTY(EditAnywhere)
 	float Mass = 1000;
@@ -43,18 +46,20 @@ private:
 	UPROPERTY(EditAnywhere)
 	float MaxDrivingForce = 10000;
 
+	// 완전히 돌린 상태에서 자동차 회전 반경의 최소 반지름(m)
 	UPROPERTY(EditAnywhere)
-	float MaxDegreesPerSecond = 90;
-
+	float MinTurningRadius = 10;
 
 	UPROPERTY(EditAnywhere)
 	float DragCoefficient = 16;
 	
-	
-	float Throttle;
+	// 감쇠계수 
+	UPROPERTY(EditAnywhere)
+	float Attenuation = 0.1f;
+
 	float SteeringThrow;
 
 	void UpdateLocationFromVelocity(const FVector& DeltaTranslation);
-	void MoveForward(float Value);
+	//void MoveForward(float Value);
 	void MoveRight(float Value);
 };

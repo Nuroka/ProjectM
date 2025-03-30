@@ -17,36 +17,40 @@ AKart::AKart()
 void AKart::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
 }
 
 // Called every frame
 void AKart::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	FVector Force = MaxDrivingForce * Throttle * GetActorForwardVector();
 
-	Force += GetResistance();
-	FVector Acceleration = Force / Mass;
+	// 시간이 지나면 지날수록 빨라지도록
+	float TimeElapsed = GetWorld()->GetTimeSeconds();
 
-	Velocity = Velocity + Acceleration * DeltaTime;
+	// 힘(F) 계산
+	FVector Force = MaxDrivingForce * TimeElapsed * GetActorForwardVector() * Attenuation;
+
+	// 공기저항
+	Force += GetResistance(); 
+	
+	// a = F/M
+	Acceleration = Force / Mass;
+
+	Velocity += Acceleration * DeltaTime;
 
 	FVector DeltaTranslation = Velocity * DeltaTime * 100;
-		
 
 	ApplyRotation(DeltaTime);
-
 	UpdateLocationFromVelocity(DeltaTranslation);
-
-
 }
 
 // 회전 적용
 void AKart::ApplyRotation(float DeltaTime)
 {
-	
-	float RotationAngle = MaxDegreesPerSecond * DeltaTime * SteeringThrow;
-	FQuat RotationDelta(GetActorUpVector(), FMath::DegreesToRadians(RotationAngle));
+	float DeltaLocation = FVector::DotProduct(GetActorForwardVector(),Velocity)* DeltaTime;
+	float RotationAngle = DeltaLocation / MinTurningRadius * SteeringThrow;
+	FQuat RotationDelta(GetActorUpVector(), RotationAngle);
 
 	Velocity = RotationDelta.RotateVector(Velocity);
 
@@ -73,7 +77,7 @@ void AKart::UpdateLocationFromVelocity(const FVector& DeltaTranslation)
 void AKart::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	PlayerInputComponent->BindAxis("MoveForward", this, &AKart::MoveForward);
+	//PlayerInputComponent->BindAxis("MoveForward", this, &AKart::MoveForward);
 	PlayerInputComponent->BindAxis("MoveRight", this, &AKart::MoveRight);
 
 }
@@ -83,10 +87,10 @@ FVector AKart::GetResistance()
 	return - Velocity.GetSafeNormal() * Velocity.SizeSquared() * DragCoefficient;
 }
 
-void AKart::MoveForward(float Value)
-{
-	Throttle = Value;
-}
+//void AKart::MoveForward(float Value)
+//{
+//	Throttle = Value;
+//}
 
 void AKart::MoveRight(float Value)
 {
