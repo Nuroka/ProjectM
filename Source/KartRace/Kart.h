@@ -6,6 +6,40 @@
 #include "GameFramework/Pawn.h"
 #include "Kart.generated.h"
 
+// 서버로 보내기 위한 구조체 (시뮬레이션)
+USTRUCT()
+struct FKartMove
+{
+	GENERATED_USTRUCT_BODY()
+	
+	UPROPERTY()
+	float SteeringThrow;
+
+	UPROPERTY()
+	float DeltaTime;
+
+	UPROPERTY()
+	float Time;
+};
+
+USTRUCT()
+struct FKartState
+{
+	GENERATED_USTRUCT_BODY()
+
+	UPROPERTY()
+	FTransform Transform;
+
+	UPROPERTY()
+	FVector Velocity;
+
+	UPROPERTY()
+	FKartMove LastMove;
+
+};
+
+
+
 UCLASS()
 class KARTRACE_API AKart : public APawn
 {
@@ -23,17 +57,27 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
-	void ApplyRotation(float DeltaTime);
+	void ApplyRotation(float DeltaTime, float SteeringThrow);
 
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 private:
+	void SimulateMove(FKartMove Move);
+
 	FVector GetResistance();
 
+	UPROPERTY(ReplicatedUsing = OnRep_ServerState)
+	FKartState ServerState;
+	
+	
+	UFUNCTION()
+	void OnRep_ServerState();
+	
 
-	UPROPERTY(EditAnywhere)
+
+	UPROPERTY(Replicated)
 	FVector Velocity;
 
 	UPROPERTY(EditAnywhere)
@@ -57,9 +101,14 @@ private:
 	UPROPERTY(EditAnywhere)
 	float Attenuation = 0.1f;
 
-	float SteeringThrow;
+	// Server RPC(원격프로시저 호출)
+	UFUNCTION(Server, Reliable, WithValidation)
+	void Server_SendMove(FKartMove Move);
+	
+	// 핸들 꺾기
+	float HandleSteeringThrow;
+
+	void Move_Right(float Value);
 
 	void UpdateLocationFromVelocity(const FVector& DeltaTranslation);
-	//void MoveForward(float Value);
-	void MoveRight(float Value);
 };

@@ -2,7 +2,7 @@
 
 
 #include "Kart.h"
-#include "math.h"
+#include "Net/UnrealNetwork.h"
 #include "Components/InputComponent.h"
 
 // Sets default values
@@ -17,7 +17,26 @@ AKart::AKart()
 void AKart::BeginPlay()
 {
 	Super::BeginPlay();
-	
+	PrimaryActorTick.bCanEverTick = true;
+	bReplicates = true;
+}
+
+
+FString GetEnumText(ENetRole Role)
+{
+	switch (Role)
+	{
+	case ROLE_None:
+		return "None";
+	case ROLE_SimulatedProxy:
+		return "SimulatedProxy";
+	case ROLE_AutonomousProxy:
+		return "AutonomousProxy";
+	case ROLE_Authority:
+		return "Authority";
+	default:
+		return "ERROR";
+	}
 }
 
 // Called every frame
@@ -25,28 +44,21 @@ void AKart::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// 시간이 지나면 지날수록 빨라지도록
-	float TimeElapsed = GetWorld()->GetTimeSeconds();
+	if (IsLocallyControlled())
+	{
+		FKartMove Move;
+		Move.DeltaTime = DeltaTime;
+		Move.SteeringThrow = HandleSteeringThrow;
 
-	// 힘(F) 계산
-	FVector Force = MaxDrivingForce * TimeElapsed * GetActorForwardVector() * Attenuation;
+		Server_SendMove(Move);
 
-	// 공기저항
-	Force += GetResistance(); 
-	
-	// a = F/M
-	Acceleration = Force / Mass;
+		SimulateMove(Move);
+	}
 
-	Velocity += Acceleration * DeltaTime;
-
-	FVector DeltaTranslation = Velocity * DeltaTime * 100;
-
-	ApplyRotation(DeltaTime);
-	UpdateLocationFromVelocity(DeltaTranslation);
 }
 
 // 회전 적용
-void AKart::ApplyRotation(float DeltaTime)
+void AKart::ApplyRotation(float DeltaTime, float SteeringThrow)
 {
 	float DeltaLocation = FVector::DotProduct(GetActorForwardVector(),Velocity)* DeltaTime;
 	float RotationAngle = DeltaLocation / MinTurningRadius * SteeringThrow;
@@ -78,7 +90,7 @@ void AKart::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 	//PlayerInputComponent->BindAxis("MoveForward", this, &AKart::MoveForward);
-	PlayerInputComponent->BindAxis("MoveRight", this, &AKart::MoveRight);
+	PlayerInputComponent->BindAxis("MoveRight", this, &AKart::Move_Right);
 
 }
 
@@ -87,13 +99,61 @@ FVector AKart::GetResistance()
 	return - Velocity.GetSafeNormal() * Velocity.SizeSquared() * DragCoefficient;
 }
 
-//void AKart::MoveForward(float Value)
-//{
-//	Throttle = Value;
-//}
-
-void AKart::MoveRight(float Value)
+void AKart::Move_Right(float Value)
 {
-	SteeringThrow = Value;
+	HandleSteeringThrow = Value;
 }
 
+void AKart::Server_SendMove_Implementation(FKartMove Move)
+{
+	SimulateMove(Move);
+
+	ServerState.LastMove = Move;
+	ServerState.Transform = GetActorTransform();
+	ServerState.Velocity = Velocity;
+	// 마지막 동작, 움직인 시뮬 상태를 보냄
+	//ServerState.LastMove =
+}
+
+// -1 ~ 1사이의 값이 아닌지 확인
+bool AKart::Server_SendMove_Validate(FKartMove Move)
+{
+	return true;
+}
+
+
+// 
+void AKart::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AKart, ServerState);
+}
+
+void AKart::OnRep_ServerState()
+{
+	SetActorTransform(ServerState.Transform);
+	Velocity = ServerState.Velocity;
+}
+
+// Move 시뮬레이팅 
+void AKart::SimulateMove(FKartMove Move)
+{
+	// 시간이 지나면 지날수록 빨라지도록
+	float TimeElapsed = GetWorld()->GetTimeSeconds();
+
+	// 힘(F) 계산
+	FVector Force = MaxDrivingForce * TimeElapsed * GetActorForwardVector() * Attenuation;
+
+	// 공기저항
+	Force += GetResistance();
+
+	// a = F/M
+	Acceleration = Force / Mass;
+	
+	Velocity += Acceleration * Move.DeltaTime;
+
+	FVector DeltaTranslation = Velocity * Move.DeltaTime * 100;
+
+	ApplyRotation(Move.DeltaTime, Move.SteeringThrow);
+	UpdateLocationFromVelocity(DeltaTranslation);
+}
