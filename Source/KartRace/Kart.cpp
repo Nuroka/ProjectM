@@ -4,6 +4,7 @@
 #include "Kart.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/InputComponent.h"
+#include "GameFramework/GameStateBase.h"
 
 // Sets default values
 AKart::AKart()
@@ -46,9 +47,15 @@ void AKart::Tick(float DeltaTime)
 
 	if (IsLocallyControlled())
 	{
-		FKartMove Move;
-		Move.DeltaTime = DeltaTime;
-		Move.SteeringThrow = HandleSteeringThrow;
+		FKartMove Move = CreateMove(DeltaTime);
+
+		// 권한이 없으면 = 클라이언트에 큐
+		if (!HasAuthority())
+		{
+			// 큐(이동 대기열)에 움직임 저장 
+			UnacknowledgedMoves.Add(Move);
+		}
+
 
 		Server_SendMove(Move);
 
@@ -133,16 +140,24 @@ void AKart::OnRep_ServerState()
 {
 	SetActorTransform(ServerState.Transform);
 	Velocity = ServerState.Velocity;
+
+	ClearAcknowledgeMoves(ServerState.LastMove);
+
+
+	for (const FKartMove& Move : UnacknowledgedMoves)
+	{
+		SimulateMove(Move);
+	}
 }
 
 // Move 시뮬레이팅 
-void AKart::SimulateMove(FKartMove Move)
+void AKart::SimulateMove(const FKartMove& Move)
 {
 	// 시간이 지나면 지날수록 빨라지도록
-	float TimeElapsed = GetWorld()->GetTimeSeconds();
+	//float TimeElapsed = GetWorld()->GetTimeSeconds();
 
-	// 힘(F) 계산
-	FVector Force = MaxDrivingForce * TimeElapsed * GetActorForwardVector() * Attenuation;
+	// 힘(F) 계산 = 감쇠 * 점점 빨라지게 시간
+	FVector Force = MaxDrivingForce * GetActorForwardVector() * Attenuation * Move.Time;
 
 	// 공기저항
 	Force += GetResistance();
@@ -156,4 +171,31 @@ void AKart::SimulateMove(FKartMove Move)
 
 	ApplyRotation(Move.DeltaTime, Move.SteeringThrow);
 	UpdateLocationFromVelocity(DeltaTranslation);
+}
+
+FKartMove AKart::CreateMove(float DeltaTime)
+{
+	FKartMove Move;
+
+	Move.DeltaTime = DeltaTime;
+	Move.SteeringThrow = HandleSteeringThrow;
+	Move.Time = GetWorld()->GetGameState()->GetServerWorldTimeSeconds();
+
+	return Move;
+}
+
+void AKart::ClearAcknowledgeMoves(FKartMove LastMove)
+{
+	TArray<FKartMove> NewMoves;
+
+	for (const FKartMove& Move : UnacknowledgedMoves)
+	{
+		if (Move.Time > LastMove.Time)
+		{
+			NewMoves.Add(Move);
+		}
+	}
+
+	UnacknowledgedMoves = NewMoves;
+
 }

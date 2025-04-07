@@ -64,7 +64,7 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 private:
-	void SimulateMove(FKartMove Move);
+	void SimulateMove(const FKartMove& Move);
 
 	FVector GetResistance();
 
@@ -111,4 +111,12 @@ private:
 	void Move_Right(float Value);
 
 	void UpdateLocationFromVelocity(const FVector& DeltaTranslation);
+
+	FKartMove CreateMove(float DeltaTime);
+
+	void ClearAcknowledgeMoves(FKartMove LastMove);
+
+
+	TArray<FKartMove> UnacknowledgedMoves;
+
 };
